@@ -221,13 +221,41 @@ vault_app.add_typer(backend_app, name="backend")
 
 
 @backend_app.command("show")
-def backend_show() -> None:
-    """Show the configured server URL + API key resolution mode."""
+def backend_show(
+    show_secret: bool = typer.Option(
+        False,
+        "--show-secret",
+        help="Print the api_key value in plaintext. Default: redacted.",
+    ),
+) -> None:
+    """Show the configured server URL + API key resolution mode.
+
+    By default any stored api_key VALUE is redacted in the output, since
+    operators commonly run this when debugging auth failures (screen-share,
+    paste into a GitHub issue). Pass --show-secret to print the literal.
+    """
     cfg = load_backend_config()
     if not cfg:
         typer.echo("No backend configured.")
         raise typer.Exit(code=1)
-    typer.echo(json.dumps(cfg, indent=2))
+    redacted = _redact_backend_config(cfg) if not show_secret else cfg
+    typer.echo(json.dumps(redacted, indent=2))
+
+
+def _redact_backend_config(cfg: dict) -> dict:
+    """Return a copy with `http.api_key` masked. Does not touch api_key_env (just a name)."""
+    import copy
+
+    safe = copy.deepcopy(cfg)
+    http = safe.get("http")
+    if isinstance(http, dict) and "api_key" in http:
+        val = http["api_key"]
+        # Show first 4 + last 4 chars; mask the rest. Empty/short → fully masked.
+        if isinstance(val, str) and len(val) >= 12:
+            http["api_key"] = f"{val[:4]}…{val[-4:]} (redacted; pass --show-secret to reveal)"
+        else:
+            http["api_key"] = "(redacted; pass --show-secret to reveal)"
+    return safe
 
 
 @backend_app.command("set-http")
@@ -249,6 +277,18 @@ def backend_set_http(
         _bail("Provide either --api-key or --api-key-env (recommended).")
     cfg: dict = {"kind": "http", "http": {"url": url.rstrip("/")}}
     if api_key:
+        # Loud warning: --api-key VALUE writes the secret to ~/.amperstand/config.json
+        # AND lands the full command line in shell history + ps aux argv during
+        # this command's lifetime. We accept it (some users genuinely don't have
+        # env vars wired) but make the cost explicit.
+        typer.echo(
+            "WARNING: --api-key wrote the secret to ~/.amperstand/config.json AND\n"
+            "         to your shell history (~/.zsh_history / ~/.bash_history).\n"
+            "         Prefer:  --api-key-env AMPERSTAND_API_KEY\n"
+            "         and:     export AMPERSTAND_API_KEY=<value> (in your shell rc)\n"
+            "         If this is a long-lived host, rotate the key after this session.",
+            err=True,
+        )
         cfg["http"]["api_key"] = api_key
     if api_key_env:
         cfg["http"]["api_key_env"] = api_key_env

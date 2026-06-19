@@ -7,6 +7,7 @@ all vault state (feeds, docs, allowlists) is server-side.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 DEFAULT_STATE_DIR = Path.home() / ".amperstand"
@@ -36,10 +37,24 @@ def load_config(state_dir: Path = DEFAULT_STATE_DIR) -> dict:
 
 
 def save_config(config: dict, state_dir: Path = DEFAULT_STATE_DIR) -> None:
-    """Write the full config dict to config.json."""
+    """Write the full config dict to config.json with restrictive perms.
+
+    Mode 0700 on the dir and 0600 on the file so that even when a user
+    accidentally stores the API key value (via `--api-key`), the file isn't
+    world-readable on shared boxes (corp dev hosts, multi-user servers).
+    Default umask on most distros lands at 0644 — we override explicitly.
+    """
     state_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        os.chmod(state_dir, 0o700)
+    except OSError:
+        pass  # best-effort; preserves existing perms if more restrictive
     path = _config_path(state_dir)
     path.write_text(json.dumps(config, indent=2), encoding="utf-8")
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
 
 
 def get_section(section: str, state_dir: Path = DEFAULT_STATE_DIR) -> dict:
