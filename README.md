@@ -6,6 +6,8 @@ The command-line client for [Amperstand](https://github.com/zkid18/amperstand-co
 
 It is local-first. You can run it on any computer with Python and write output directly into a folder or Obsidian vault — commands run in-process against the core library, no server needed. Point it at a running [`amperstand-server`](https://github.com/zkid18/amperstand-core) instead and the same commands become thin HTTP calls.
 
+📖 **Docs** — full reference at [zkid18/ampersand-core/docs/](https://github.com/zkid18/ampersand-core/tree/main/docs).
+
 ## Install
 
 ```bash
