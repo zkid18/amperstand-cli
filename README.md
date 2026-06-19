@@ -41,8 +41,6 @@ amperstand feed add https://danluu.com/atom.xml
 amperstand feed list
 amperstand feed sync
 
-amperstand email parse ./newsletter.eml
-
 amperstand vault status
 amperstand config show
 ```
@@ -57,16 +55,6 @@ Every command hits an endpoint on your server. Extraction, persistence, search �
 | `~/.amperstand/amperstand.log` | CLI-side logs (HTTP requests, errors) |
 
 That's the entire local footprint. No vault files on disk, no extraction state — the server owns all of it.
-
-## Why two packages?
-
-`amperstand-core` (the server) and `amperstand` (this CLI) communicate over the network — like `postgres` and `psql`. The CLI doesn't import the server's Python code; it makes HTTP requests. This lets you:
-
-- Run a small, fast CLI on every laptop you own (~5MB install, no heavy deps)
-- Run one heavy server somewhere (the server can be on a droplet, a home NAS, or even localhost)
-- Share one vault across the CLI, the Telegram bot, the browser extension, and any other client
-
-If you want to run everything on one machine, just point the CLI at `http://localhost:8765`.
 
 ## License
 
