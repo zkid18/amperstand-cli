@@ -1,3 +1,3 @@
-"""Amperstand — capture anything from the web as markdown you own."""
+"""Amperstand — HTTP client for an amperstand-core vault server."""
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

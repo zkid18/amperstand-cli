@@ -1,73 +1,73 @@
 # Amperstand CLI
 
-The command-line client for [Amperstand](https://github.com/zkid18/amperstand-core). It captures articles, YouTube videos, feeds, and newsletters into markdown files you own.
+Thin HTTP client for an [`amperstand-core`](https://github.com/zkid18/ampersand-core) server. Capture URLs, YouTube videos, RSS feeds, and newsletter `.eml` files into your remote vault from the terminal.
 
-**This repo is deliberately thin.** All extraction and capture logic lives in [`amperstand-core`](https://github.com/zkid18/amperstand-core), which this package imports as a library — nothing is duplicated here. What this repo adds is the user-facing `amperstand` command plus the local-workflow glue core doesn't have: config, local state, an optional git-backed vault, and backend routing.
-
-It is local-first. You can run it on any computer with Python and write output directly into a folder or Obsidian vault — commands run in-process against the core library, no server needed. Point it at a running [`amperstand-server`](https://github.com/zkid18/amperstand-core) instead and the same commands become thin HTTP calls.
+The CLI does **no extraction itself** — every command translates to a REST call against your Amperstand server. Lightweight install (no Playwright, no yt-dlp, no heavy ML deps), small footprint.
 
 📖 **Docs** — full reference at [zkid18/ampersand-core/docs/](https://github.com/zkid18/ampersand-core/tree/main/docs).
 
 ## Install
 
 ```bash
-git clone https://github.com/zkid18/amperstand-cli
-cd amperstand-cli
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e .
-playwright install chromium
+pip install amperstand
 ```
 
-## Quick Start
+You'll need an `amperstand-core` server running somewhere. See [zkid18/ampersand-core](https://github.com/zkid18/ampersand-core) to set one up — typically on a $4 droplet.
 
-Capture an article:
+## Setup
+
+Two env vars + one config command:
 
 ```bash
-amperstand capture https://example.com/article
+# The bearer token your server is using
+export AMPERSTAND_API_KEY="<the-64-char-hex-from-your-server>"
+
+# Point the CLI at your server (use --api-key-env to pass the env var NAME, not the value)
+amperstand vault backend set-http http://your-server:8765 \
+    --api-key-env AMPERSTAND_API_KEY
 ```
 
-Print markdown to stdout instead of writing a file:
+> ⚠️ Pass `--api-key-env AMPERSTAND_API_KEY` (the name), not the key value itself. The CLI stores the name in `~/.amperstand/config.json` and reads the value at runtime — rotating the key is just `export AMPERSTAND_API_KEY=<new>`.
+
+To make this survive new shells, add the export to `~/.zshrc`.
+
+## Use
 
 ```bash
-amperstand capture https://example.com/article --stdout
-```
+amperstand capture https://danluu.com/why-hardware-development-is-hard/
+amperstand capture https://www.youtube.com/watch?v=e_NDFEWGW1w
 
-Capture into a specific folder:
+amperstand feed add https://danluu.com/atom.xml
+amperstand feed list
+amperstand feed sync
 
-```bash
-amperstand capture https://example.com/article --output ~/notes/inbox
-```
+amperstand email parse ./newsletter.eml
 
-## What It Supports
-
-- Articles and web pages
-- YouTube videos and transcripts
-- RSS and Atom feeds
-- Newsletter emails and `.eml` files
-
-## Common Commands
-
-```bash
-amperstand feed add https://example.com/feed.xml
-amperstand feed sync --output ~/notes/inbox
-
-amperstand email parse ./newsletter.eml --output ~/notes/inbox
-
+amperstand vault status
 amperstand config show
-amperstand --version
 ```
 
-## Local State
+Every command hits an endpoint on your server. Extraction, persistence, search — all run server-side. The CLI just speaks HTTP.
 
-Amperstand stores local state in `~/.amperstand`, including:
+## Configuration
 
-- `state.json` for feed subscriptions and capture history
-- `config.json` for settings
-- `amperstand.log` for logs
+| File | Purpose |
+| --- | --- |
+| `~/.amperstand/config.json` | Server URL + the env-var name for your API key |
+| `~/.amperstand/amperstand.log` | CLI-side logs (HTTP requests, errors) |
 
-## Notes
+That's the entire local footprint. No vault files on disk, no extraction state — the server owns all of it.
 
-- Some JavaScript-heavy pages need Playwright. If Chromium has not been installed yet, run `playwright install chromium`.
-- YouTube capture uses `yt-dlp`.
-- Vault and git sync are optional. If you just want local files on another computer, you do not need the server at all.
+## Why two packages?
+
+`amperstand-core` (the server) and `amperstand` (this CLI) communicate over the network — like `postgres` and `psql`. The CLI doesn't import the server's Python code; it makes HTTP requests. This lets you:
+
+- Run a small, fast CLI on every laptop you own (~5MB install, no heavy deps)
+- Run one heavy server somewhere (the server can be on a droplet, a home NAS, or even localhost)
+- Share one vault across the CLI, the Telegram bot, the browser extension, and any other client
+
+If you want to run everything on one machine, just point the CLI at `http://localhost:8765`.
+
+## License
+
+MIT.
