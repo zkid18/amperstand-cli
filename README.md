@@ -1,10 +1,6 @@
-# Amperstand CLI
+# amperstand
 
-Thin HTTP client for an [`amperstand-core`](https://github.com/zkid18/ampersand-core) server. Capture URLs, YouTube videos, RSS feeds, and newsletter `.eml` files into your remote vault from the terminal.
-
-The CLI does **no extraction itself** — every command translates to a REST call against your Amperstand server. Lightweight install (no Playwright, no yt-dlp, no heavy ML deps), small footprint.
-
-📖 **Docs** — full reference at [zkid18/ampersand-core/docs/](https://github.com/zkid18/ampersand-core/tree/main/docs).
+Thin HTTP client for an [amperstand-core](https://github.com/zkid18/ampersand-core) vault server. ~5 MB install, two runtime deps (`typer` + `httpx`), no extraction code — every command is a REST call to your server.
 
 ## Install
 
@@ -12,24 +8,23 @@ The CLI does **no extraction itself** — every command translates to a REST cal
 pip install amperstand
 ```
 
-You'll need an `amperstand-core` server running somewhere. See [zkid18/ampersand-core](https://github.com/zkid18/ampersand-core) to set one up — typically on a $4 droplet.
+Requires Python 3.10+. You'll need an `amperstand-core` server running somewhere — see [ampersand-core](https://github.com/zkid18/ampersand-core).
 
-## Setup
-
-Two env vars + one config command:
+## Connect to your server
 
 ```bash
-# The bearer token your server is using
-export AMPERSTAND_API_KEY="<the-64-char-hex-from-your-server>"
+# Save the API key to a 0600 file, export it from your shell rc
+echo "<your-server-api-key>" > ~/.amperstand-api-key
+chmod 600 ~/.amperstand-api-key
+echo 'export AMPERSTAND_API_KEY="$(cat ~/.amperstand-api-key | tr -d "\n")"' >> ~/.zshrc
+source ~/.zshrc
 
-# Point the CLI at your server (use --api-key-env to pass the env var NAME, not the value)
-amperstand vault backend set-http http://your-server:8765 \
+# Point the CLI at your server
+amperstand vault backend set-http https://your-server \
     --api-key-env AMPERSTAND_API_KEY
 ```
 
-> ⚠️ Pass `--api-key-env AMPERSTAND_API_KEY` (the name), not the key value itself. The CLI stores the name in `~/.amperstand/config.json` and reads the value at runtime — rotating the key is just `export AMPERSTAND_API_KEY=<new>`.
-
-To make this survive new shells, add the export to `~/.zshrc`.
+⚠️ `--api-key-env AMPERSTAND_API_KEY` is the **name** of an env var, not the value. The CLI stores the name and reads the value at runtime — rotation stays cheap.
 
 ## Use
 
@@ -42,19 +37,26 @@ amperstand feed list
 amperstand feed sync
 
 amperstand vault status
-amperstand config show
 ```
 
-Every command hits an endpoint on your server. Extraction, persistence, search — all run server-side. The CLI just speaks HTTP.
+Every command hits an endpoint on your server. Extraction, persistence, search — all server-side. The CLI just speaks HTTP.
 
-## Configuration
+## Documentation
+
+Full docs live in the [amperstand-core repo's `docs/`](https://github.com/zkid18/ampersand-core/tree/main/docs) — Mintlify site. Run `mintlify dev` from that folder to preview. Key pages:
+
+- **Install the CLI** — `cli-install.mdx`
+- **Use the CLI** (the six things to know how to do day-to-day) — `cli-quickstart.mdx`
+- **CLI reference** (every command, every flag) — `cli-reference.mdx`
+
+## Local footprint
 
 | File | Purpose |
 | --- | --- |
-| `~/.amperstand/config.json` | Server URL + the env-var name for your API key |
+| `~/.amperstand/config.json` | Server URL + the env-var name for your API key (mode 0600) |
 | `~/.amperstand/amperstand.log` | CLI-side logs (HTTP requests, errors) |
 
-That's the entire local footprint. No vault files on disk, no extraction state — the server owns all of it.
+That's it. No vault files on disk, no extraction state — the server owns all of it.
 
 ## License
 
