@@ -244,9 +244,17 @@ def rotate_key(
     you can't track.
     """
     import os as _os
+    import sys as _sys
     from pathlib import Path as _Path
 
     if not yes:
+        # Refuse non-interactive runs without --yes rather than crashing in
+        # typer.confirm with an opaque Abort exception. CI / cron / systemd
+        # all run with stdin not a TTY.
+        if not _sys.stdin.isatty():
+            _bail(
+                "non-interactive shell (stdin not a TTY). Pass --yes to confirm."
+            )
         typer.echo(
             "About to mint a new API key on the server and replace ~/.amperstand-api-key.\n"
             "Old key will stop being accepted by the server immediately (~25s drain window).\n"
@@ -269,18 +277,48 @@ def rotate_key(
     typer.echo(f"New API key: {new_key}")
     typer.echo("")
 
-    # Best-effort update of the local key file.
+    # Symlink-safe atomic write of the local key file.
+    # - O_NOFOLLOW: if ~/.amperstand-api-key is a pre-planted symlink, refuse
+    #   to follow (we'd otherwise write the new key into the symlink's target,
+    #   possibly an attacker-controlled location).
+    # - mode 0o600 set at create time, NOT after — no TOCTOU window where the
+    #   file briefly exists with umask-default perms (typically 0o644) holding
+    #   the new key.
     key_file = _Path.home() / ".amperstand-api-key"
     try:
-        key_file.write_text(new_key + "\n")
-        _os.chmod(key_file, 0o600)
+        flags = _os.O_WRONLY | _os.O_CREAT | _os.O_TRUNC | _os.O_NOFOLLOW
+        fd = _os.open(str(key_file), flags, 0o600)
+        try:
+            with _os.fdopen(fd, "w") as f:
+                f.write(new_key + "\n")
+        except Exception:
+            _os.close(fd)
+            raise
+        # Defense in depth: re-chmod in case the file pre-existed at a wider
+        # mode (O_CREAT's mode arg only applies when creating; if the file
+        # already existed, its existing mode is preserved by O_TRUNC).
+        _os.chmod(str(key_file), 0o600)
         typer.echo(f"Updated {key_file} (mode 0600).")
     except OSError as e:
-        typer.echo(
-            f"Could not update {key_file}: {e}\n"
-            f"Save the key above into that file manually.",
-            err=True,
-        )
+        # ELOOP from O_NOFOLLOW means it's a symlink — call that out
+        # specifically so the user understands why we refused.
+        import errno as _errno
+
+        if isinstance(e, OSError) and e.errno in (_errno.ELOOP, _errno.EMLINK):
+            typer.echo(
+                f"Refused to write {key_file}: it's a symlink.\n"
+                f"Symlinks here are a security risk — remove it and re-run:\n"
+                f"  rm {key_file} && amperstand rotate-key --yes\n"
+                f"In the meantime, paste this key manually into a fresh file:\n"
+                f"  echo '{new_key}' > {key_file} && chmod 600 {key_file}",
+                err=True,
+            )
+        else:
+            typer.echo(
+                f"Could not update {key_file}: {e}\n"
+                f"Save the key above into that file manually.",
+                err=True,
+            )
 
     warning = resp.get("warning")
     if warning:
