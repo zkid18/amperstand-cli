@@ -20,7 +20,7 @@ echo 'export AMPERSTAND_API_KEY="$(cat ~/.amperstand-api-key | tr -d "\n")"' >> 
 source ~/.zshrc
 
 # Point the CLI at your server
-amperstand vault backend set-http https://your-server \
+amperstand vault backend set-server https://your-server \
     --api-key-env AMPERSTAND_API_KEY
 ```
 

@@ -66,7 +66,7 @@ def _client() -> Client:
     if not cfg or cfg.get("kind") != "http":
         typer.echo(
             "No server configured. Run:\n"
-            "  amperstand vault backend set-http <url> --api-key-env AMPERSTAND_API_KEY",
+            "  amperstand vault backend set-server <url> --api-key-env AMPERSTAND_API_KEY",
             err=True,
         )
         raise typer.Exit(code=1)
@@ -371,8 +371,8 @@ def _redact_backend_config(cfg: dict) -> dict:
     return safe
 
 
-@backend_app.command("set-http")
-def backend_set_http(
+@backend_app.command("set-server")
+def backend_set_server(
     url: str = typer.Argument(help="Server URL, e.g. http://your-server:8765"),
     api_key: str | None = typer.Option(
         None,
