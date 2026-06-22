@@ -87,6 +87,57 @@ def _bail(msg: str, code: int = 1) -> None:
     raise typer.Exit(code=code)
 
 
+# ── Discoverability ──────────────────────────────────────────────────
+
+
+@app.command()
+def commands() -> None:
+    """Print every command in the CLI, in one flat tree.
+
+    `amperstand --help` only shows top-level entries — typer is hierarchical
+    by default. This command walks all subgroups so you can see everything
+    at once.
+    """
+    import click as _click
+
+    # typer.main.get_command wraps the Typer app as a click.Group we can walk
+    click_app = typer.main.get_command(app)
+    typer.echo("amperstand")
+    _print_command_tree(click_app, prefix="")
+
+
+def _print_command_tree(cmd, prefix: str = "") -> None:
+    """Recursively print a click Group's commands as a tree.
+
+    Skips hidden commands and uses each command's short help (first line of
+    docstring) as the inline description. Keeps lines under ~80 chars by
+    truncating descriptions.
+    """
+    import click as _click
+
+    if not isinstance(cmd, _click.Group):
+        return
+
+    items = sorted(
+        (name, child)
+        for name, child in cmd.commands.items()
+        if not getattr(child, "hidden", False)
+    )
+    for i, (name, child) in enumerate(items):
+        is_last = i == len(items) - 1
+        connector = "└── " if is_last else "├── "
+        brief = (child.short_help or (child.help or "").split("\n")[0] or "").strip()
+        if len(brief) > 60:
+            brief = brief[:57] + "..."
+        line = f"{prefix}{connector}{name}"
+        if brief:
+            line += f"  — {brief}"
+        typer.echo(line)
+        if isinstance(child, _click.Group):
+            next_prefix = prefix + ("    " if is_last else "│   ")
+            _print_command_tree(child, next_prefix)
+
+
 # ── Capture ───────────────────────────────────────────────────────────
 
 
