@@ -107,6 +107,15 @@ class Client:
         data = self._get("/v1/docs?limit=1")
         return int(data.get("total", 0))
 
+    # ── Admin ───────────────────────────────────────────────────────
+
+    def rotate_api_key(self) -> dict[str, Any]:
+        """POST /admin/rotate-key. Server mints a new key, writes it to the
+        env file, returns it. Server's in-memory key is updated synchronously
+        so the next request accepts the new value.
+        """
+        return self._post("/admin/rotate-key", {}, timeout=30.0)
+
     # ── Internals ───────────────────────────────────────────────────
 
     def _get(self, path: str) -> dict[str, Any]:

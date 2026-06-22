@@ -216,6 +216,81 @@ def vault_status() -> None:
     typer.echo(f"Docs: {count}")
 
 
+@app.command(name="rotate-key")
+def rotate_key(
+    yes: bool = typer.Option(
+        False,
+        "--yes",
+        "-y",
+        help="Skip the confirmation prompt.",
+    ),
+) -> None:
+    """Mint a new API key on the server and update your local key file.
+
+    What happens:
+
+    1. Server mints a new 64-char hex key, writes it to /etc/amperstand/env,
+       updates its own in-memory key. The next request requires the new key.
+    2. CLI updates ~/.amperstand-api-key with the new value (mode 0600).
+    3. You re-source your shell rc (`source ~/.zshrc`) for new shells to pick
+       it up.
+    4. SSH in and restart the bot / vault-watcher / feed-sync, which still
+       hold the OLD key in their process memory.
+
+    Trade-off: this command requires the EXISTING API key to authenticate.
+    A leaked key can rotate itself — locking you out. Recovery is SSH-only:
+    `amperstand-admin rotate-key` on the server. Most operators are fine with
+    this; if you're rotating because the key leaked, also revoke any sessions
+    you can't track.
+    """
+    import os as _os
+    from pathlib import Path as _Path
+
+    if not yes:
+        typer.echo(
+            "About to mint a new API key on the server and replace ~/.amperstand-api-key.\n"
+            "Old key will stop being accepted by the server immediately (~25s drain window).\n"
+            "Telegram bot / extension / other clients need their own restart / re-paste."
+        )
+        if not typer.confirm("Continue?"):
+            raise typer.Exit(code=1)
+
+    with _client() as c:
+        try:
+            resp = c.rotate_api_key()
+        except ClientError as e:
+            _bail(str(e))
+
+    new_key = resp.get("new_api_key")
+    if not new_key:
+        _bail("server didn't return a new key")
+
+    typer.echo("")
+    typer.echo(f"New API key: {new_key}")
+    typer.echo("")
+
+    # Best-effort update of the local key file.
+    key_file = _Path.home() / ".amperstand-api-key"
+    try:
+        key_file.write_text(new_key + "\n")
+        _os.chmod(key_file, 0o600)
+        typer.echo(f"Updated {key_file} (mode 0600).")
+    except OSError as e:
+        typer.echo(
+            f"Could not update {key_file}: {e}\n"
+            f"Save the key above into that file manually.",
+            err=True,
+        )
+
+    warning = resp.get("warning")
+    if warning:
+        typer.echo("")
+        typer.echo(warning)
+
+    typer.echo("")
+    typer.echo("Run `source ~/.zshrc` (or open a new terminal) for new shells to pick up the value.")
+
+
 backend_app = typer.Typer(help="Configure the server URL + API key.")
 vault_app.add_typer(backend_app, name="backend")
 
