@@ -73,7 +73,7 @@ class Client:
     # ── Feeds ───────────────────────────────────────────────────────
 
     def feeds_list(self) -> list[dict[str, Any]]:
-        data = self._get("/v1/feeds")
+        data = self._get("/feeds")
         return data.get("items") or data if isinstance(data, list) else data.get("items", [])
 
     def feeds_register(
@@ -88,15 +88,15 @@ class Client:
             body["label"] = name
         if tags:
             body["tags"] = tags
-        return self._post("/v1/feeds/register", body)
+        return self._post("/feeds/register", body)
 
     def feeds_remove(self, feed_id: str) -> None:
-        r = self._client.delete(f"/v1/feeds/{feed_id}")
+        r = self._client.delete(f"/feeds/{feed_id}")
         if r.status_code not in (200, 204):
             raise ClientError(self._fmt(r))
 
     def feeds_sync(self, *, timeout: float = 600.0) -> dict[str, Any]:
-        return self._post("/v1/feeds/sync", {}, timeout=timeout)
+        return self._post("/feeds/sync", {}, timeout=timeout)
 
     # ── Vault ───────────────────────────────────────────────────────
 
@@ -104,7 +104,7 @@ class Client:
         return self._get("/health")
 
     def docs_count(self) -> int:
-        data = self._get("/v1/docs?limit=1")
+        data = self._get("/vault?limit=1")
         return int(data.get("total", 0))
 
     # ── Admin ───────────────────────────────────────────────────────
