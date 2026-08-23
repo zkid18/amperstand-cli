@@ -1,14 +1,16 @@
-# Amperstand
+# Amperstand CLI
 
-Amperstand captures articles, YouTube videos, feeds, and newsletters into markdown files you own.
+The command-line client for [Amperstand](https://github.com/zkid18/amperstand-core). It captures articles, YouTube videos, feeds, and newsletters into markdown files you own.
 
-It is local-first. You can run it on any computer with Python and write output directly into a folder or Obsidian vault. The HTTP server is optional and not required for the core workflow.
+**This repo is deliberately thin.** All extraction and capture logic lives in [`amperstand-core`](https://github.com/zkid18/amperstand-core), which this package imports as a library — nothing is duplicated here. What this repo adds is the user-facing `amperstand` command plus the local-workflow glue core doesn't have: config, local state, an optional git-backed vault, and backend routing.
+
+It is local-first. You can run it on any computer with Python and write output directly into a folder or Obsidian vault — commands run in-process against the core library, no server needed. Point it at a running [`amperstand-server`](https://github.com/zkid18/amperstand-core) instead and the same commands become thin HTTP calls.
 
 ## Install
 
 ```bash
-git clone <your-repo-url>
-cd amperstand
+git clone https://github.com/zkid18/amperstand-cli
+cd amperstand-cli
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
