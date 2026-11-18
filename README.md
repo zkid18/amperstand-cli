@@ -31,6 +31,7 @@ amperstand vault backend set-server https://your-server \
 ```bash
 amperstand capture https://danluu.com/why-hardware-development-is-hard/
 amperstand capture https://www.youtube.com/watch?v=e_NDFEWGW1w
+amperstand capture-file talk.mp4      # needs ffmpeg locally; the server transcribes
 
 amperstand feed add https://danluu.com/atom.xml
 amperstand feed list
