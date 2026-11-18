@@ -11,13 +11,21 @@ to bubble up loudly.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Any
 
 import httpx
 
 
 class ClientError(Exception):
-    """Raised when the server returns a non-2xx or the network fails."""
+    """Raised when the server returns a non-2xx or the network fails.
+
+    `status_code` is the HTTP status, or None when no response arrived.
+    """
+
+    def __init__(self, message: str, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
 
 
 class Client:
@@ -70,6 +78,34 @@ class Client:
             timeout=180.0,
         )
 
+    def transcribe_submit(self, audio: Path, params: dict[str, Any]) -> dict[str, Any]:
+        """POST /transcribe/jobs: upload a recording; the server transcribes and saves it.
+
+        `params` are the endpoint's query parameters (filename, title, tags, …).
+        Returns the queued job.
+        """
+        try:
+            with audio.open("rb") as f:
+                r = self._client.post(
+                    "/transcribe/jobs",
+                    params={k: v for k, v in params.items() if v not in (None, [], "")},
+                    content=f,
+                    headers={"Content-Type": "application/octet-stream", "Content-Length": str(audio.stat().st_size)},
+                    timeout=httpx.Timeout(60.0, write=600.0),
+                )
+        except httpx.HTTPError as e:
+            raise ClientError(f"POST /transcribe/jobs failed: {type(e).__name__}: {e}") from e
+        if r.status_code >= 400:
+            raise ClientError(self._fmt(r), status_code=r.status_code)
+        return r.json()
+
+    def transcribe_job(self, job_id: str) -> dict[str, Any]:
+        """GET /transcribe/jobs/{id}: status, progress, and doc_id once saved."""
+        try:
+            return self._get(f"/transcribe/jobs/{job_id}")
+        except httpx.HTTPError as e:
+            raise ClientError(f"GET /transcribe/jobs/{job_id} failed: {type(e).__name__}: {e}") from e
+
     # ── Feeds ───────────────────────────────────────────────────────
 
     def feeds_list(self) -> list[dict[str, Any]]:
@@ -121,7 +157,7 @@ class Client:
     def _get(self, path: str) -> dict[str, Any]:
         r = self._client.get(path)
         if r.status_code >= 400:
-            raise ClientError(self._fmt(r))
+            raise ClientError(self._fmt(r), status_code=r.status_code)
         return r.json()
 
     def _post(
@@ -129,7 +165,7 @@ class Client:
     ) -> dict[str, Any]:
         r = self._client.post(path, json=body, timeout=timeout) if timeout else self._client.post(path, json=body)
         if r.status_code >= 400:
-            raise ClientError(self._fmt(r))
+            raise ClientError(self._fmt(r), status_code=r.status_code)
         return r.json()
 
     @staticmethod

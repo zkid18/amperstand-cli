@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+import re
+from pathlib import Path
+from typing import Optional
 
 import typer
 
@@ -165,6 +168,109 @@ def capture(
             typer.echo(f"  {path}")
     else:
         typer.echo(f"Extracted (not persisted): {title}")
+
+
+# Seconds between status checks while waiting for a transcription job.
+_POLL_SECONDS = 15.0
+
+
+@app.command("capture-file")
+def capture_file(
+    path: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="Video or audio file on this computer."
+    ),
+    title: Optional[str] = typer.Option(None, "--title", help="Document title. Default: from the file name."),
+    source: Optional[str] = typer.Option(
+        None,
+        "--source",
+        help="URL where the recording is published. Capturing the same --source again updates that document.",
+    ),
+    tag: list[str] = typer.Option([], "--tag", help="Tag to add to the document. Repeat for more."),
+    language: Optional[str] = typer.Option(
+        None, "--language", help="Spoken language as a two-letter code (en, ru, es…). Default: detected."
+    ),
+    wait: bool = typer.Option(
+        True, "--wait/--no-wait", help="Wait for the transcript, showing progress, or return once it's queued."
+    ),
+) -> None:
+    """Transcribe a local video or audio file into the vault.
+
+    ffmpeg (on this computer) extracts a small audio track and uploads it; the
+    server transcribes it in the background and saves the transcript as a
+    document. The server needs the `transcribe` extra installed.
+    """
+    import tempfile
+    import time
+
+    from amperstand import media
+
+    if language and not re.fullmatch(r"[a-z]{2}", language):
+        _bail(f"--language takes a two-letter code such as en or ru, not {language!r}")
+    try:
+        ffmpeg, ffprobe = media.find_tools()
+        info = media.probe(path, ffprobe)
+    except media.MediaError as e:
+        _bail(str(e))
+
+    with _client() as c:
+        with tempfile.TemporaryDirectory(prefix="amperstand-") as tmp:
+            typer.echo(f"Extracting audio from {path.name} ({media.hms(info.duration)})…", err=True)
+            try:
+                audio = media.extract_audio(path, Path(tmp), ffmpeg)
+            except media.MediaError as e:
+                _bail(str(e))
+            typer.echo(f"Uploading {audio.stat().st_size / 2**20:.1f} MB…", err=True)
+            try:
+                job = c.transcribe_submit(
+                    audio,
+                    {
+                        "filename": audio.name,
+                        "original_name": path.name,
+                        "title": title or media.title_from_filename(path),
+                        "source": source,
+                        "tags": tag,
+                        "type": "video" if info.has_video else "audio",
+                        "language": language,
+                    },
+                )
+            except ClientError as e:
+                _bail(str(e))
+
+        job_id = job["id"]
+        if not wait:
+            typer.echo(f"Queued: transcription job {job_id}. The transcript appears in the vault when it's done.")
+            return
+        typer.echo(f"Queued as job {job_id}. Transcribing on the server; Ctrl-C stops waiting, not the job.", err=True)
+        shown = ""
+        try:
+            while job["status"] in ("queued", "running"):
+                if job["status"] == "queued":
+                    line = f"  waiting in queue (position {job.get('queue_position', '?')})"
+                else:
+                    done = job.get("done_seconds") or 0.0
+                    total = job.get("duration") or info.duration
+                    line = f"  transcribed {media.hms(done)} of {media.hms(total)} ({min(done / total, 1):.0%})"
+                if line != shown:
+                    typer.echo(line, err=True)
+                    shown = line
+                time.sleep(_POLL_SECONDS)
+                try:
+                    job = c.transcribe_job(job_id)
+                except ClientError as e:
+                    if e.status_code is not None and e.status_code < 500:
+                        _bail(str(e))
+                    # The server is restarting or briefly unreachable; the job survives that.
+        except KeyboardInterrupt:
+            typer.echo(
+                f"\nStopped waiting. The server keeps going (job {job_id}); "
+                "the transcript appears in the vault when it's done.",
+                err=True,
+            )
+            raise typer.Exit(code=130)
+
+    if job["status"] != "done":
+        _bail(f"transcription failed: {job.get('error') or job['status']}")
+    typer.echo(f"Saved: {job['doc_id']} — {job.get('title')}")
 
 
 # ── Feeds ─────────────────────────────────────────────────────────────
